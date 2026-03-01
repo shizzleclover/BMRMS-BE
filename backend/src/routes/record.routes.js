@@ -1,0 +1,111 @@
+import express from 'express';
+import * as recordService from '../services/record.service.js';
+import { protect, authorize } from '../middleware/auth.js';
+import { uploadSingle } from '../middleware/upload.js';
+import { validate, commonSchemas } from '../middleware/validate.js';
+import { z } from 'zod';
+
+const router = express.Router();
+
+// Validation schemas
+const createRecordSchema = z.object({
+  body: z.object({
+    patientId: commonSchemas.objectId,
+    recordType: z.enum([
+      'consultation', 'diagnosis', 'prescription', 'lab_result',
+      'imaging', 'surgery', 'vaccination', 'other'
+    ]),
+    title: z.string().min(1),
+    description: z.string().optional(),
+    diagnosis: z.object({
+      condition: z.string().optional(),
+      icdCode: z.string().optional(),
+      severity: z.enum(['mild', 'moderate', 'severe', 'critical']).optional(),
+      notes: z.string().optional(),
+    }).optional(),
+  }),
+});
+
+// Routes
+router.post(
+  '/',
+  protect,
+  authorize('doctor', 'admin'),
+  uploadSingle('file'),
+  validate(createRecordSchema),
+  async (req, res, next) => {
+    try {
+      const clinicId = req.user.clinicId;
+      if (!clinicId && req.user.role !== 'admin') {
+        throw new Error('Doctor must be associated with a clinic to create records');
+      }
+
+      const record = await recordService.createRecord(
+        req.body,
+        req.file,
+        req.user._id,
+        clinicId
+      );
+
+      res.status(201).json({
+        success: true,
+        message: 'Medical record created successfully',
+        data: record,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get('/patient/:patientId', protect, async (req, res, next) => {
+  try {
+    // Basic authorization: Patient can see own, Doctors/Admins can see if they have consent
+    // (Actual consent check would go here or in service)
+    const records = await recordService.getPatientRecords(req.params.patientId, req.query);
+    res.json({
+      success: true,
+      data: records,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id', protect, async (req, res, next) => {
+  try {
+    const record = await recordService.getRecordById(req.params.id);
+    res.json({
+      success: true,
+      data: record,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id/download', protect, async (req, res, next) => {
+  try {
+    const { buffer, fileName, fileType } = await recordService.downloadRecordFile(req.params.id);
+    
+    res.setHeader('Content-Type', fileType);
+    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+    res.send(buffer);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id/verify', protect, async (req, res, next) => {
+  try {
+    const result = await recordService.verifyIntegrity(req.params.id);
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+export default router;
