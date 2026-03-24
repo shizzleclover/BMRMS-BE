@@ -23,10 +23,14 @@ const app = express();
 // Security middleware
 app.use(helmet());
 
+// Railway/Proxy support for rate limiting + real client IPs
+app.set('trust proxy', 1);
+
 // CORS configuration (supports multiple origins + Vercel preview URLs)
 app.use(
   cors({
     origin(origin, callback) {
+      if (config.cors.allowAll) return callback(null, true);
       if (!origin) return callback(null, true);
       if (config.cors.origins.includes(origin)) return callback(null, true);
       if (

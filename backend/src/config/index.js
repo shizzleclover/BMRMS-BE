@@ -76,6 +76,7 @@ const config = {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
+    allowAll: process.env.CORS_ALLOW_ALL === 'true',
     allowVercelPreviews: process.env.CORS_ALLOW_VERCEL_PREVIEWS === 'true',
   },
 
