@@ -70,9 +70,13 @@ const config = {
     maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 100,
   },
 
-  // CORS
+  // CORS — comma-separated origins; optional allow all *.vercel.app preview URLs
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origins: (process.env.CORS_ORIGIN || 'http://localhost:3000')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    allowVercelPreviews: process.env.CORS_ALLOW_VERCEL_PREVIEWS === 'true',
   },
 
   // Logging

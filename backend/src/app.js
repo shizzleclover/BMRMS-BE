@@ -23,10 +23,20 @@ const app = express();
 // Security middleware
 app.use(helmet());
 
-// CORS configuration
+// CORS configuration (supports multiple origins + Vercel preview URLs)
 app.use(
   cors({
-    origin: config.cors.origin,
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (config.cors.origins.includes(origin)) return callback(null, true);
+      if (
+        config.cors.allowVercelPreviews &&
+        /^https:\/\/.+\.vercel\.app$/i.test(origin)
+      ) {
+        return callback(null, true);
+      }
+      callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
