@@ -110,7 +110,7 @@ const medicalRecordSchema = new mongoose.Schema(
 );
 
 // Indexes
-medicalRecordSchema.index({ recordNumber: 1 });
+// medicalRecordSchema.index({ recordNumber: 1 });
 medicalRecordSchema.index({ patientId: 1, visitDate: -1 });
 medicalRecordSchema.index({ doctorId: 1 });
 medicalRecordSchema.index({ clinicId: 1 });

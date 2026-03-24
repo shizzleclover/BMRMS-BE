@@ -14,9 +14,9 @@ export const validate = (schema) => {
       });
 
       // Replace request data with validated data
-      req.body = validatedData.body || req.body;
-      req.query = validatedData.query || req.query;
-      req.params = validatedData.params || req.params;
+      if (validatedData.body) req.body = validatedData.body;
+      if (validatedData.query) Object.assign(req.query, validatedData.query);
+      if (validatedData.params) Object.assign(req.params, validatedData.params);
 
       next();
     } catch (error) {

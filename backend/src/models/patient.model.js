@@ -92,7 +92,7 @@ const patientSchema = new mongoose.Schema(
 
 // Indexes
 patientSchema.index({ userId: 1 });
-patientSchema.index({ patientNumber: 1 });
+// patientSchema.index({ patientNumber: 1 });
 patientSchema.index({ primaryClinic: 1 });
 
 // Auto-generate patient number

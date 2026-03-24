@@ -54,7 +54,7 @@ router.delete('/:id', protect, async (req, res, next) => {
 
 router.get('/my-consents', protect, authorize('patient', 'doctor', 'admin'), async (req, res, next) => {
   try {
-    const consents = await consentService.getPatientConsents(req.user._id);
+    const consents = await consentService.getPatientConsents(req.user);
     res.json({
       success: true,
       data: consents,

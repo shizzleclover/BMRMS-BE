@@ -134,14 +134,34 @@ export const checkAccessConsent = async (patientId, doctorId) => {
 };
 
 /**
- * Get all consents for a patient
+ * Get all consents for a user (patient, doctor, or admin)
  */
-export const getPatientConsents = async (patientUserId) => {
-  const patient = await Patient.findOne({ userId: patientUserId });
-  if (!patient) throw new AppError('Patient not found', 404);
+export const getPatientConsents = async (user) => {
+  const populateChain = (query) =>
+    query
+      .populate({
+        path: 'patientId',
+        populate: { path: 'userId', select: 'firstName lastName email' },
+      })
+      .populate('grantedTo.userId', 'firstName lastName email role')
+      .populate('grantedTo.clinicId', 'name clinicCode')
+      .populate('grantedBy', 'firstName lastName')
+      .sort({ createdAt: -1 });
 
-  return await Consent.find({ patientId: patient._id })
-    .populate('grantedTo.userId', 'firstName lastName email role')
-    .populate('grantedTo.clinicId', 'name clinicCode')
-    .sort({ createdAt: -1 });
+  if (user.role === 'admin') {
+    return await populateChain(Consent.find());
+  } else if (user.role === 'doctor') {
+    return await populateChain(
+      Consent.find({ 'grantedTo.userId': user._id })
+    );
+  } else {
+    const patient = await Patient.findOne({ userId: user._id });
+    if (!patient) {
+      return [];
+    }
+
+    return await populateChain(
+      Consent.find({ patientId: patient._id })
+    );
+  }
 };

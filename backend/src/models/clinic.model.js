@@ -114,7 +114,7 @@ const clinicSchema = new mongoose.Schema(
 );
 
 // Indexes
-clinicSchema.index({ clinicCode: 1 });
+// clinicSchema.index({ clinicCode: 1 });
 clinicSchema.index({ adminId: 1 });
 clinicSchema.index({ 'address.city': 1, 'address.state': 1 });
 
