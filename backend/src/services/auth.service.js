@@ -56,8 +56,10 @@ export const register = async (userData, ipAddress, userAgent) => {
  * Login user
  */
 export const login = async (email, password, ipAddress, userAgent) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+
   // Find user and include password
-  const user = await User.findOne({ email }).select('+password');
+  const user = await User.findOne({ email: normalizedEmail }).select('+password');
 
   if (!user) {
     throw new AppError('Invalid email or password', 401);
