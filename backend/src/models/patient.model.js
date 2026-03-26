@@ -95,8 +95,9 @@ patientSchema.index({ userId: 1 });
 // patientSchema.index({ patientNumber: 1 });
 patientSchema.index({ primaryClinic: 1 });
 
-// Auto-generate patient number
-patientSchema.pre('save', async function (next) {
+// Auto-generate patient number.
+// Use `validate` so the value exists before Mongoose validates required fields.
+patientSchema.pre('validate', async function (next) {
   if (!this.patientNumber) {
     const count = await mongoose.model('Patient').countDocuments();
     this.patientNumber = `PAT${String(count + 1).padStart(6, '0')}`;
