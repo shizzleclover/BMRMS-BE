@@ -118,8 +118,9 @@ const clinicSchema = new mongoose.Schema(
 clinicSchema.index({ adminId: 1 });
 clinicSchema.index({ 'address.city': 1, 'address.state': 1 });
 
-// Auto-generate clinic code
-clinicSchema.pre('save', async function (next) {
+// Auto-generate clinic code.
+// Use `validate` so the required `clinicCode` exists before Mongoose validates.
+clinicSchema.pre('validate', async function (next) {
   if (!this.clinicCode) {
     const count = await mongoose.model('Clinic').countDocuments();
     this.clinicCode = `CLI${String(count + 1).padStart(5, '0')}`;

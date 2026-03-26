@@ -26,21 +26,12 @@ app.use(helmet());
 // Railway/Proxy support for rate limiting + real client IPs
 app.set('trust proxy', 1);
 
-// CORS configuration (supports multiple origins + Vercel preview URLs)
+// CORS (open for all origins)
+// This removes all origin allowlist/preview restrictions so browser preflight
+// requests are never blocked.
 app.use(
   cors({
-    origin(origin, callback) {
-      if (config.cors.allowAll) return callback(null, true);
-      if (!origin) return callback(null, true);
-      if (config.cors.origins.includes(origin)) return callback(null, true);
-      if (
-        config.cors.allowVercelPreviews &&
-        /^https:\/\/.+\.vercel\.app$/i.test(origin)
-      ) {
-        return callback(null, true);
-      }
-      callback(null, false);
-    },
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],

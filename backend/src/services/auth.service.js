@@ -52,8 +52,9 @@ export const register = async (userData, ipAddress, userAgent) => {
   await user.save();
 
   // Create audit log
+  const auditAction = user.role === 'patient' ? 'patient_created' : 'user_login';
   await AuditLog.createLog({
-    action: 'user_register',
+    action: auditAction,
     userId: user._id,
     ipAddress,
     userAgent,
