@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import config from '../config/index.js';
 import User from '../models/user.model.js';
+import Patient from '../models/patient.model.js';
 import { AppError } from '../middleware/errorHandler.js';
 import AuditLog from '../models/auditLog.model.js';
 
@@ -15,14 +16,28 @@ const generateToken = (userId, secret, expiresIn) => {
  * Register a new user
  */
 export const register = async (userData, ipAddress, userAgent) => {
+  const normalizedEmail = String(userData.email || '').trim().toLowerCase();
+
   // Check if user already exists
-  const existingUser = await User.findOne({ email: userData.email });
+  const existingUser = await User.findOne({ email: normalizedEmail });
   if (existingUser) {
     throw new AppError('Email already registered', 400);
   }
 
   // Create user
-  const user = await User.create(userData);
+  const user = await User.create({
+    ...userData,
+    email: normalizedEmail,
+  });
+
+  // If registering a patient, also create the Patient profile document.
+  // The UI lists patients from the `Patient` collection, so without this,
+  // new patients won't show up anywhere.
+  if (user.role === 'patient') {
+    const patientProfile = await Patient.create({ userId: user._id });
+    user.patientId = patientProfile._id;
+    await user.save();
+  }
 
   // Generate tokens
   const accessToken = generateToken(user._id, config.jwt.secret, config.jwt.expiresIn);
@@ -38,7 +53,7 @@ export const register = async (userData, ipAddress, userAgent) => {
 
   // Create audit log
   await AuditLog.createLog({
-    action: 'user_login',
+    action: 'user_register',
     userId: user._id,
     ipAddress,
     userAgent,
