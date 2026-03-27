@@ -68,7 +68,16 @@ router.get(
   async (req, res, next) => {
     try {
       const { page, limit, ...filters } = req.query;
-      const result = await patientService.getAllPatients(filters, { page, limit });
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10) || 10));
+
+      const scope = {};
+      if (req.user.role === 'doctor') {
+        scope.clinicId = req.user.clinicId || null;
+        scope.doctorRequiresClinic = true;
+      }
+
+      const result = await patientService.getAllPatients(filters, { page: pageNum, limit: limitNum }, scope);
       res.json({
         success: true,
         data: result.patients,

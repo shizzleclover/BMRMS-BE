@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Patient from '../models/patient.model.js';
 import User from '../models/user.model.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -26,12 +27,34 @@ export const createPatient = async (patientData, userId) => {
 
 /**
  * Get all patients (with pagination and filtering)
+ * @param {object} scope - When scope.clinicId is set (doctor), only patients linked to that clinic
+ *   via primaryClinic or assignedClinics are returned.
  */
-export const getAllPatients = async (filters = {}, options = {}) => {
+export const getAllPatients = async (filters = {}, options = {}, scope = {}) => {
   const { page = 1, limit = 10 } = options;
   const skip = (page - 1) * limit;
 
+  const clinicId = scope.clinicId;
+  if (scope.doctorRequiresClinic && !clinicId) {
+    return {
+      patients: [],
+      total: 0,
+      page: Number(page) || 1,
+      pages: 0,
+    };
+  }
+
   const query = { isActive: true, ...filters };
+
+  if (clinicId) {
+    const cid = mongoose.Types.ObjectId.isValid(clinicId)
+      ? new mongoose.Types.ObjectId(String(clinicId))
+      : clinicId;
+    query.$or = [
+      { primaryClinic: cid },
+      { 'assignedClinics.clinicId': cid },
+    ];
+  }
 
   const patients = await Patient.find(query)
     .populate('userId', 'firstName lastName email phone')
