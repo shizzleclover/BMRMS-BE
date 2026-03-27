@@ -10,7 +10,8 @@ const router = express.Router();
 router.get('/doctors', protect, authorize('patient', 'admin'), async (req, res, next) => {
   try {
     const doctors = await User.find({ role: 'doctor', isActive: true })
-      .select('_id firstName lastName email')
+      .select('_id firstName lastName email clinicId')
+      .populate('clinicId', 'name clinicCode')
       .sort({ lastName: 1, firstName: 1 })
       .lean();
 

@@ -5,11 +5,29 @@ import * as blockchainService from './blockchain.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import AuditLog from '../models/auditLog.model.js';
 
+const populateConsentForResponse = async (id) =>
+  Consent.findById(id)
+    .populate({
+      path: 'patientId',
+      populate: { path: 'userId', select: 'firstName lastName email' },
+    })
+    .populate('grantedTo.userId', 'firstName lastName email role')
+    .populate('grantedTo.clinicId', 'name clinicCode')
+    .populate('grantedBy', 'firstName lastName')
+    .exec();
+
 /**
  * Grant consent to a doctor or clinic
  */
 export const grantConsent = async (consentData, patientUserId) => {
   const { grantedToUserId, clinicId, accessLevel, scope, expiresAt } = consentData;
+
+  const doctorUser = await User.findById(grantedToUserId).select('role clinicId');
+  if (!doctorUser || doctorUser.role !== 'doctor') {
+    throw new AppError('You can only grant consent to a registered doctor account', 400);
+  }
+
+  const resolvedClinicId = clinicId || doctorUser.clinicId || undefined;
 
   // 1. Get patient ID from user ID
   const patient = await Patient.findOne({ userId: patientUserId });
@@ -33,7 +51,7 @@ export const grantConsent = async (consentData, patientUserId) => {
     patientId: patient._id,
     grantedTo: {
       userId: grantedToUserId,
-      clinicId,
+      clinicId: resolvedClinicId,
     },
     accessLevel,
     scope,
@@ -41,15 +59,19 @@ export const grantConsent = async (consentData, patientUserId) => {
     grantedBy: patientUserId,
   });
 
-  // 4. Grant on Blockchain
-  const blockchainResult = await blockchainService.grantConsentOnChain(
-    consentToSave._id.toString(),
-    patient._id.toString(),
-    grantedToUserId.toString(),
-    accessLevel
-  );
+  // 4. Grant on Blockchain (never block saving consent if chain/wallet is misconfigured)
+  let blockchainResult = null;
+  try {
+    blockchainResult = await blockchainService.grantConsentOnChain(
+      consentToSave._id.toString(),
+      patient._id.toString(),
+      grantedToUserId.toString(),
+      accessLevel
+    );
+  } catch (err) {
+    console.error('Consent blockchain step failed; persisting consent in database only:', err?.message || err);
+  }
 
-  // 5. Save to MongoDB with Tx Hash
   consentToSave.blockchainTxHash = blockchainResult?.transactionHash || null;
   const consent = await consentToSave.save();
 
@@ -65,10 +87,10 @@ export const grantConsent = async (consentData, patientUserId) => {
       grantedTo: grantedToUserId,
       accessLevel,
     },
-    blockchainTxHash: blockchainResult.transactionHash,
+    blockchainTxHash: blockchainResult?.transactionHash,
   });
 
-  return consent;
+  return await populateConsentForResponse(consent._id);
 };
 
 /**
@@ -83,12 +105,19 @@ export const revokeConsent = async (consentId, userId) => {
   // Verify ownership (only patient themselves or admin can revoke)
   // This check usually happens in the route, but safe to double check
 
-  // 1. Revoke on Blockchain
-  const blockchainResult = await blockchainService.revokeConsentOnChain(consentId);
+  // 1. Revoke on Blockchain (do not block DB revoke if chain fails)
+  let blockchainResult = null;
+  try {
+    blockchainResult = await blockchainService.revokeConsentOnChain(consentId);
+  } catch (err) {
+    console.error('Consent revoke blockchain step failed; updating database only:', err?.message || err);
+  }
 
   // 2. Update MongoDB
   await consent.revoke(userId, 'Revoked by user');
-  consent.blockchainTxHash = blockchainResult.transactionHash;
+  if (blockchainResult?.transactionHash) {
+    consent.blockchainTxHash = blockchainResult.transactionHash;
+  }
   await consent.save();
 
   // 3. Audit Log
@@ -99,7 +128,7 @@ export const revokeConsent = async (consentId, userId) => {
       resourceType: 'Consent',
       resourceId: consent._id,
     },
-    blockchainTxHash: blockchainResult.transactionHash,
+    blockchainTxHash: blockchainResult?.transactionHash,
   });
 
   return consent;
