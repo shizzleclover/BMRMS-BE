@@ -1,0 +1,21 @@
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Env files (keep .env.example tracked)
+.env
+.env.local
+.env.*.local
+backend/.env
+smart_contracts/.env

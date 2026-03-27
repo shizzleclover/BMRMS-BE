@@ -17,6 +17,7 @@ import consentRoutes from './routes/consent.routes.js';
 import auditRoutes from './routes/audit.routes.js';
 import syncRoutes from './routes/sync.routes.js';
 import healthRoutes from './routes/health.routes.js';
+import userRoutes from './routes/user.routes.js';
 
 const app = express();
 
@@ -77,6 +78,7 @@ app.use(`${apiPrefix}/records`, recordRoutes);
 app.use(`${apiPrefix}/consent`, consentRoutes);
 app.use(`${apiPrefix}/audit`, auditRoutes);
 app.use(`${apiPrefix}/sync`, syncRoutes);
+app.use(`${apiPrefix}/users`, userRoutes);
 
 // Welcome route
 app.get('/', (req, res) => {
