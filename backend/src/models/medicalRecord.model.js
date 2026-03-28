@@ -20,7 +20,8 @@ const medicalRecordSchema = new mongoose.Schema(
     clinicId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Clinic',
-      required: true,
+      // Optional when legacy data exists; createRecord always sets doctor or patient clinic when possible
+      required: false,
     },
     recordType: {
       type: String,

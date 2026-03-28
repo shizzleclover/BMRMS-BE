@@ -1,11 +1,49 @@
 import MedicalRecord from '../models/medicalRecord.model.js';
 import Patient from '../models/patient.model.js';
-import Clinic from '../models/clinic.model.js';
+import User from '../models/user.model.js';
 import * as ipfsService from './ipfs.service.js';
 import * as blockchainService from './blockchain.service.js';
 import * as encryptionService from './encryption.service.js';
+import { checkAccessConsent } from './consent.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import AuditLog from '../models/auditLog.model.js';
+
+/**
+ * Whether this user may read/write this patient's medical records (admin, own patient, treating clinic, or active consent).
+ */
+export const userCanAccessPatientRecords = async (user, patientId) => {
+  if (!user || !patientId) return false;
+  const pid = String(patientId);
+
+  if (user.role === 'admin') return true;
+
+  if (user.role === 'patient') {
+    const patient = await Patient.findOne({ userId: user._id });
+    return !!patient && patient._id.toString() === pid;
+  }
+
+  if (user.role === 'doctor') {
+    const hasConsent = await checkAccessConsent(pid, user._id);
+    if (hasConsent) return true;
+
+    const patient = await Patient.findById(pid);
+    if (!patient || !user.clinicId) return false;
+    const cid = user.clinicId.toString();
+    if (patient.primaryClinic && patient.primaryClinic.toString() === cid) return true;
+    return (patient.assignedClinics || []).some(
+      (a) => a.clinicId && a.clinicId.toString() === cid
+    );
+  }
+
+  return false;
+};
+
+export const assertCanAccessPatientRecords = async (user, patientId) => {
+  const ok = await userCanAccessPatientRecords(user, patientId);
+  if (!ok) {
+    throw new AppError('Not authorized to access this patient\'s medical records', 403);
+  }
+};
 
 /**
  * Create a new medical record
@@ -13,10 +51,24 @@ import AuditLog from '../models/auditLog.model.js';
 export const createRecord = async (recordData, file, doctorId, clinicId) => {
   const { patientId, recordType, title, description, diagnosis } = recordData;
 
+  const actingUser = await User.findById(doctorId).select('role clinicId');
+  if (!actingUser) {
+    throw new AppError('User not found', 404);
+  }
+  await assertCanAccessPatientRecords(actingUser, patientId);
+
   // 1. Verify patient exists
   const patient = await Patient.findById(patientId);
   if (!patient) {
     throw new AppError('Patient not found', 404);
+  }
+
+  const resolvedClinicId = clinicId || patient.primaryClinic || undefined;
+  if (!resolvedClinicId) {
+    throw new AppError(
+      'Cannot save record without a clinic: assign this doctor to a clinic or set the patient primary clinic',
+      400
+    );
   }
 
   // 2. Encryption and IPFS Upload
@@ -48,7 +100,7 @@ export const createRecord = async (recordData, file, doctorId, clinicId) => {
   const medicalRecordToSave = new MedicalRecord({
     patientId,
     doctorId,
-    clinicId,
+    clinicId: resolvedClinicId,
     recordType,
     title,
     description,
@@ -79,7 +131,7 @@ export const createRecord = async (recordData, file, doctorId, clinicId) => {
   await AuditLog.createLog({
     action: 'record_created',
     userId: doctorId,
-    clinicId,
+    clinicId: resolvedClinicId,
     targetResource: {
       resourceType: 'MedicalRecord',
       resourceId: medicalRecord._id,
@@ -88,7 +140,7 @@ export const createRecord = async (recordData, file, doctorId, clinicId) => {
       recordNumber: medicalRecord.recordNumber,
       ipfsHash: medicalRecord.ipfsHash,
     },
-    blockchainTxHash: blockchainResult.transactionHash,
+    blockchainTxHash: blockchainResult?.transactionHash,
   });
 
   return medicalRecord;

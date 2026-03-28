@@ -3,6 +3,8 @@ import * as recordService from '../services/record.service.js';
 import { protect, authorize } from '../middleware/auth.js';
 import { uploadSingle } from '../middleware/upload.js';
 import { validate, commonSchemas } from '../middleware/validate.js';
+import { AppError } from '../middleware/errorHandler.js';
+import MedicalRecord from '../models/medicalRecord.model.js';
 import { z } from 'zod';
 
 const router = express.Router();
@@ -35,16 +37,11 @@ router.post(
   validate(createRecordSchema),
   async (req, res, next) => {
     try {
-      const clinicId = req.user.clinicId;
-      if (!clinicId && req.user.role !== 'admin') {
-        throw new Error('Doctor must be associated with a clinic to create records');
-      }
-
       const record = await recordService.createRecord(
         req.body,
         req.file,
         req.user._id,
-        clinicId
+        req.user.clinicId
       );
 
       res.status(201).json({
@@ -60,8 +57,7 @@ router.post(
 
 router.get('/patient/:patientId', protect, async (req, res, next) => {
   try {
-    // Basic authorization: Patient can see own, Doctors/Admins can see if they have consent
-    // (Actual consent check would go here or in service)
+    await recordService.assertCanAccessPatientRecords(req.user, req.params.patientId);
     const records = await recordService.getPatientRecords(req.params.patientId, req.query);
     res.json({
       success: true,
@@ -74,6 +70,11 @@ router.get('/patient/:patientId', protect, async (req, res, next) => {
 
 router.get('/:id', protect, async (req, res, next) => {
   try {
+    const meta = await MedicalRecord.findById(req.params.id).select('patientId');
+    if (!meta) {
+      return next(new AppError('Record not found', 404));
+    }
+    await recordService.assertCanAccessPatientRecords(req.user, meta.patientId);
     const record = await recordService.getRecordById(req.params.id);
     res.json({
       success: true,
@@ -86,6 +87,11 @@ router.get('/:id', protect, async (req, res, next) => {
 
 router.get('/:id/download', protect, async (req, res, next) => {
   try {
+    const meta = await MedicalRecord.findById(req.params.id).select('patientId');
+    if (!meta) {
+      return next(new AppError('Record not found', 404));
+    }
+    await recordService.assertCanAccessPatientRecords(req.user, meta.patientId);
     const { buffer, fileName, fileType } = await recordService.downloadRecordFile(req.params.id);
     
     res.setHeader('Content-Type', fileType);
@@ -98,6 +104,11 @@ router.get('/:id/download', protect, async (req, res, next) => {
 
 router.get('/:id/verify', protect, async (req, res, next) => {
   try {
+    const meta = await MedicalRecord.findById(req.params.id).select('patientId');
+    if (!meta) {
+      return next(new AppError('Record not found', 404));
+    }
+    await recordService.assertCanAccessPatientRecords(req.user, meta.patientId);
     const result = await recordService.verifyIntegrity(req.params.id);
     res.json({
       success: true,
