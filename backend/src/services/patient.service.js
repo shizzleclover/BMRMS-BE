@@ -5,6 +5,28 @@ import { AppError } from '../middleware/errorHandler.js';
 import AuditLog from '../models/auditLog.model.js';
 
 /**
+ * Return the Patient document for this user, creating a minimal profile if missing
+ * (e.g. legacy accounts registered before auto-create Patient on signup).
+ */
+export const ensurePatientProfile = async (userId) => {
+  let patient = await Patient.findOne({ userId });
+  if (patient) return patient;
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+  if (user.role !== 'patient') {
+    throw new AppError('Only patient accounts have a patient profile', 403);
+  }
+
+  patient = await Patient.create({ userId });
+  user.patientId = patient._id;
+  await user.save();
+  return patient;
+};
+
+/**
  * Create a new patient profile
  */
 export const createPatient = async (patientData, userId) => {

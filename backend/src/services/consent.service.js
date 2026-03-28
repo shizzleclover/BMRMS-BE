@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import Consent from '../models/consent.model.js';
-import Patient from '../models/patient.model.js';
 import User from '../models/user.model.js';
+import * as patientService from './patient.service.js';
 import * as blockchainService from './blockchain.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import AuditLog from '../models/auditLog.model.js';
@@ -32,11 +32,8 @@ export const grantConsent = async (consentData, patientUserId) => {
 
   const resolvedClinicId = clinicId || doctorUser.clinicId || undefined;
 
-  // 1. Get patient ID from user ID
-  const patient = await Patient.findOne({ userId: patientUserId });
-  if (!patient) {
-    throw new AppError('Patient profile not found', 404);
-  }
+  // 1. Resolve patient profile (create minimal one for legacy users missing Patient doc)
+  const patient = await patientService.ensurePatientProfile(patientUserId);
 
   // 2. Check if already granted
   const existingConsent = await Consent.findOne({
@@ -190,13 +187,7 @@ export const getPatientConsents = async (user) => {
       Consent.find({ 'grantedTo.userId': doctorUserId })
     );
   } else {
-    const patient = await Patient.findOne({ userId: user._id });
-    if (!patient) {
-      return [];
-    }
-
-    return await populateChain(
-      Consent.find({ patientId: patient._id })
-    );
+    const patient = await patientService.ensurePatientProfile(user._id);
+    return await populateChain(Consent.find({ patientId: patient._id }));
   }
 };
