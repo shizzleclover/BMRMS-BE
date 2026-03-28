@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Consent from '../models/consent.model.js';
 import Patient from '../models/patient.model.js';
 import User from '../models/user.model.js';
@@ -180,8 +181,11 @@ export const getPatientConsents = async (user) => {
   if (user.role === 'admin') {
     return await populateChain(Consent.find());
   } else if (user.role === 'doctor') {
+    const doctorUserId = mongoose.Types.ObjectId.isValid(user._id)
+      ? new mongoose.Types.ObjectId(String(user._id))
+      : user._id;
     return await populateChain(
-      Consent.find({ 'grantedTo.userId': user._id })
+      Consent.find({ 'grantedTo.userId': doctorUserId })
     );
   } else {
     const patient = await Patient.findOne({ userId: user._id });
