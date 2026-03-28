@@ -74,7 +74,7 @@ router.get(
       const scope = {};
       if (req.user.role === 'doctor') {
         scope.clinicId = req.user.clinicId || null;
-        scope.doctorRequiresClinic = true;
+        scope.doctorUserId = req.user._id;
       }
 
       const result = await patientService.getAllPatients(filters, { page: pageNum, limit: limitNum }, scope);
