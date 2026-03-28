@@ -23,7 +23,9 @@ const populateConsentForResponse = async (id) =>
 export const grantConsent = async (consentData, patientUserId) => {
   const { grantedToUserId, clinicId, accessLevel, scope, expiresAt } = consentData;
 
-  const doctorUser = await User.findById(grantedToUserId).select('role clinicId');
+  const granteeId = new mongoose.Types.ObjectId(String(grantedToUserId));
+
+  const doctorUser = await User.findById(granteeId).select('role clinicId');
   if (!doctorUser || doctorUser.role !== 'doctor') {
     throw new AppError('You can only grant consent to a registered doctor account', 400);
   }
@@ -39,7 +41,7 @@ export const grantConsent = async (consentData, patientUserId) => {
   // 2. Check if already granted
   const existingConsent = await Consent.findOne({
     patientId: patient._id,
-    'grantedTo.userId': grantedToUserId,
+    'grantedTo.userId': granteeId,
     status: 'active',
   });
 
@@ -51,7 +53,7 @@ export const grantConsent = async (consentData, patientUserId) => {
   const consentToSave = new Consent({
     patientId: patient._id,
     grantedTo: {
-      userId: grantedToUserId,
+      userId: granteeId,
       clinicId: resolvedClinicId,
     },
     accessLevel,
@@ -66,7 +68,7 @@ export const grantConsent = async (consentData, patientUserId) => {
     blockchainResult = await blockchainService.grantConsentOnChain(
       consentToSave._id.toString(),
       patient._id.toString(),
-      grantedToUserId.toString(),
+      granteeId.toString(),
       accessLevel
     );
   } catch (err) {
@@ -85,7 +87,7 @@ export const grantConsent = async (consentData, patientUserId) => {
       resourceId: consent._id,
     },
     details: {
-      grantedTo: grantedToUserId,
+      grantedTo: granteeId,
       accessLevel,
     },
     blockchainTxHash: blockchainResult?.transactionHash,
