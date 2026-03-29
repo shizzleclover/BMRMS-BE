@@ -1,149 +1,112 @@
-import { create } from 'ipfs-http-client';
+import axios from 'axios';
+import FormData from 'form-data';
 import config from '../config/index.js';
 import { AppError } from '../middleware/errorHandler.js';
 
-let ipfsClient = null;
-
 /**
- * Initialize IPFS client
- */
-const getIPFSClient = () => {
-  if (!ipfsClient) {
-    try {
-      ipfsClient = create({
-        host: config.ipfs.host,
-        port: config.ipfs.port,
-        protocol: config.ipfs.protocol,
-      });
-      console.log('✅ IPFS client initialized');
-    } catch (error) {
-      console.error('❌ Failed to initialize IPFS client:', error);
-      throw new AppError('IPFS service unavailable', 503);
-    }
-  }
-  return ipfsClient;
-};
-
-/**
- * Upload file to IPFS
+ * Upload file to IPFS via Pinata
  */
 export const uploadToIPFS = async (fileBuffer, metadata = {}) => {
   try {
-    const client = getIPFSClient();
+    const url = `https://api.pinata.cloud/pinning/pinFileToIPFS`;
 
-    // Add file to IPFS
-    const result = await client.add(fileBuffer, {
-      progress: (prog) => console.log(`IPFS upload progress: ${prog}`),
+    const data = new FormData();
+    data.append('file', fileBuffer, {
+      filename: metadata.fileName || 'medical-record.enc',
     });
 
-    const ipfsHash = result.path;
+    const pinataMetadata = JSON.stringify({
+      name: metadata.fileName || 'Medical Record',
+      keyvalues: {
+        recordType: metadata.recordType || 'unknown',
+        ...metadata,
+      },
+    });
+    data.append('pinataMetadata', pinataMetadata);
 
-    console.log(`✅ File uploaded to IPFS: ${ipfsHash}`);
+    const pinataOptions = JSON.stringify({
+      cidVersion: 0,
+    });
+    data.append('pinataOptions', pinataOptions);
+
+    const response = await axios.post(url, data, {
+      maxBodyLength: 'Infinity',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${data._boundary}`,
+        Authorization: `Bearer ${config.ipfs.jwt}`,
+      },
+    });
+
+    const ipfsHash = response.data.IpfsHash;
+
+    console.log(`✅ File uploaded to Pinata IPFS: ${ipfsHash}`);
 
     return {
       ipfsHash,
-      size: result.size,
+      size: response.data.PinSize,
       gateway: `${config.ipfs.gateway}${ipfsHash}`,
       metadata,
     };
   } catch (error) {
-    console.error('IPFS upload error:', error);
-    throw new AppError('Failed to upload file to IPFS', 500);
+    console.error('Pinata upload error:', error.response?.data || error.message);
+    throw new AppError('Failed to upload file to IPFS via Pinata', 500);
   }
 };
 
 /**
- * Retrieve file from IPFS
+ * Retrieve file from IPFS via Gateway
  */
 export const retrieveFromIPFS = async (ipfsHash) => {
   try {
-    const client = getIPFSClient();
+    const url = `${config.ipfs.gateway}${ipfsHash}`;
+    const response = await axios.get(url, { responseType: 'arraybuffer' });
 
-    // Get file from IPFS
-    const chunks = [];
-    for await (const chunk of client.cat(ipfsHash)) {
-      chunks.push(chunk);
-    }
+    console.log(`✅ File retrieved from IPFS Gateway: ${ipfsHash}`);
 
-    const fileBuffer = Buffer.concat(chunks);
-
-    console.log(`✅ File retrieved from IPFS: ${ipfsHash}`);
-
-    return fileBuffer;
+    return Buffer.from(response.data);
   } catch (error) {
-    console.error('IPFS retrieval error:', error);
-    throw new AppError('Failed to retrieve file from IPFS', 500);
+    console.error('IPFS retrieval error:', error.message);
+    throw new AppError('Failed to retrieve file from IPFS Gateway', 500);
   }
 };
 
 /**
- * Pin file to IPFS (ensure it's not garbage collected)
+ * Pinning and Unpinning are handled by Pinata's API
+ * These functions are maintained for compatibility with the record service
  */
 export const pinToIPFS = async (ipfsHash) => {
-  try {
-    const client = getIPFSClient();
-
-    await client.pin.add(ipfsHash);
-
-    console.log(`✅ File pinned to IPFS: ${ipfsHash}`);
-
-    return { success: true, ipfsHash };
-  } catch (error) {
-    console.error('IPFS pinning error:', error);
-    throw new AppError('Failed to pin file to IPFS', 500);
-  }
+  return { success: true, ipfsHash };
 };
 
-/**
- * Unpin file from IPFS
- */
 export const unpinFromIPFS = async (ipfsHash) => {
   try {
-    const client = getIPFSClient();
-
-    await client.pin.rm(ipfsHash);
-
-    console.log(`✅ File unpinned from IPFS: ${ipfsHash}`);
-
+    const url = `https://api.pinata.cloud/pinning/unpin/${ipfsHash}`;
+    await axios.delete(url, {
+      headers: {
+        Authorization: `Bearer ${config.ipfs.jwt}`,
+      },
+    });
     return { success: true, ipfsHash };
   } catch (error) {
-    console.error('IPFS unpinning error:', error);
-    // Don't throw error for unpinning failures
+    console.error('Pinata unpinning error:', error.response?.data || error.message);
     return { success: false, error: error.message };
   }
 };
 
 /**
- * Get IPFS file stats
- */
-export const getIPFSStats = async (ipfsHash) => {
-  try {
-    const client = getIPFSClient();
-
-    const stats = await client.files.stat(`/ipfs/${ipfsHash}`);
-
-    return {
-      hash: ipfsHash,
-      size: stats.size,
-      cumulativeSize: stats.cumulativeSize,
-      type: stats.type,
-    };
-  } catch (error) {
-    console.error('IPFS stats error:', error);
-    throw new AppError('Failed to get IPFS file stats', 500);
-  }
-};
-
-/**
- * Check if IPFS is available
+ * Check if Pinata connection is valid
  */
 export const checkIPFSConnection = async () => {
   try {
-    const client = getIPFSClient();
-    const { id } = await client.id();
-    return { connected: true, peerId: id };
+    const url = `https://api.pinata.cloud/data/testAuthentication`;
+    const response = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${config.ipfs.jwt}`,
+      },
+    });
+    return { connected: true, message: response.data.message };
   } catch (error) {
-    console.error('IPFS connection check failed:', error);
+    console.error('Pinata connection check failed:', error.response?.data || error.message);
     return { connected: false, error: error.message };
   }
 };

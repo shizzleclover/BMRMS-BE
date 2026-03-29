@@ -23,12 +23,12 @@ const config = {
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   },
 
-  // IPFS
+  // IPFS (Pinata)
   ipfs: {
-    host: process.env.IPFS_HOST || 'localhost',
-    port: parseInt(process.env.IPFS_PORT, 10) || 5001,
-    protocol: process.env.IPFS_PROTOCOL || 'http',
-    gateway: process.env.IPFS_GATEWAY || 'http://localhost:8080/ipfs/',
+    apiKey: process.env.PINATA_API_KEY,
+    secretApiKey: process.env.PINATA_SECRET_API_KEY,
+    jwt: process.env.PINATA_JWT,
+    gateway: process.env.PINATA_GATEWAY || 'https://gateway.pinata.cloud/ipfs/',
   },
 
   // Blockchain
